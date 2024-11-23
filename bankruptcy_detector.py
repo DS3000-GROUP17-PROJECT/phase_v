@@ -13,5 +13,6 @@ import matplotlib.pyplot as plt
 #This will make american bankrupcty csv into a dataframe we can use
 df = pd.read_csv('american_bankruptcy.csv')
 
-#This is to test if datframe creation worked, feel free to delete
-print(df.head())
+#removing all the 'C_" from the start of the company_name and making them into integers
+for index, row in df.iterrows():
+    df.loc[index, 'company_name'] = int(row['company_name'][2:])
