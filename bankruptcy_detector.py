@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -47,11 +48,6 @@ class BankruptcyDetector:
 
         return X_train, y_train, X_valid, y_valid, X_test, y_test, df
     
-    def heatmap(self, df):
-        # Create a heatmap of the correlation matrix
-        sns.heatmap(df.corr(), annot=True, cmap='coolwarm', fmt='.2f')
-
-
     def trainingModel(self,X_train, y_train):
         # Train the pipeline on the training data
         self.pipeline.fit(X_train, y_train)
@@ -65,6 +61,24 @@ class BankruptcyDetector:
         # Make prediction on the test set
         y_pred_test = self.pipeline.predict(X_test)
         return y_pred_test
+    
+    def RidgeRegressionCoef(self, feature_names):
+        # Get the coefficients of the logistic regression model
+        coef = self.pipeline.named_steps['classifier'].coef_[0]
+        feature_importance = pd.Series(coef, index=feature_names)
+        feature_importance = feature_importance.sort_values(ascending=False)
+        
+        # Print the coefficients
+        print("Ridge Coefficients:")
+        print(feature_importance)
+        
+        # Plot the coefficients
+        plt.figure(figsize=(10, 6))
+        sns.barplot(x=feature_importance.values, y=feature_importance.index)
+        plt.title('Ridge Coefficients for Logistic Regression')
+        plt.xlabel('Coefficient Value')
+        plt.ylabel('Feature')
+        plt.show()
     
     def main(self):
         # Storing all the split data into a holder array
@@ -103,6 +117,10 @@ class BankruptcyDetector:
         print("Accuracy:", accuracy_score(y_test, y_pred_test))
         print("Classification Report:\n", classification_report(y_test, y_pred_test))
         print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
+
+        # Analyze the ridge coefficients
+        feature_names = X_train.columns
+        self.RidgeRegressionCoef(feature_names)
 
 if __name__ == "__main__":
     BankruptcyDetector().main()
