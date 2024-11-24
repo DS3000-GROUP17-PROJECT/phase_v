@@ -20,7 +20,7 @@ class EDA:
     # Create a heatmap of the correlation matrix
     def heatmap(self, df):
 
-        # Select only numeric columns
+        # Select only numeric columns (Essentially dropping Company# & )
         numeric_df = df.select_dtypes(include=[np.number])
 
         # Rename the columns
@@ -44,6 +44,7 @@ class EDA:
                       "Total Liabilities", 
                       "Total Operating Expenses"]
         
+        # Create a heatmap
         cols = numeric_df.columns
         cm = np.corrcoef(numeric_df[cols].values.T)
         sns.set(font_scale=1.5)
