@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import seaborn as sns
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -44,18 +45,23 @@ class BankruptcyDetector:
         X_test = test_df.drop(columns=['status_label', 'company_name', 'year'])
         y_test = test_df['status_label']
 
-        return X_train, y_train, X_valid, y_valid, X_test, y_test
+        return X_train, y_train, X_valid, y_valid, X_test, y_test, df
+    
+    def heatmap(self, df):
+        # Create a heatmap of the correlation matrix
+        sns.heatmap(df.corr(), annot=True, cmap='coolwarm', fmt='.2f')
+
 
     def trainingModel(self,X_train, y_train):
         # Train the pipeline on the training data
         self.pipeline.fit(X_train, y_train)
 
-    def validateModel(self, X_valid, y_valid):
+    def validateModel(self, X_valid):
         # Make prediction on the validation set
         y_pred_valid = self.pipeline.predict(X_valid)
         return y_pred_valid
     
-    def predictModel(self, X_valid, X_test):
+    def predictModel(self, X_test):
         # Make prediction on the test set
         y_pred_test = self.pipeline.predict(X_test)
         return y_pred_test
@@ -80,11 +86,10 @@ class BankruptcyDetector:
         self.trainingModel(X_train, y_train)
 
         # Calling the validate model function (Validation)
-        y_pred_valid = self.validateModel(X_valid, y_valid)
+        y_pred_valid = self.validateModel(X_valid)
 
         # Calling the predict model function (Test)
-        y_pred_test = self.predictModel(X_valid, X_test)
-
+        y_pred_test = self.predictModel(X_test)
 
 
         # Evaluate the model on the validation set
