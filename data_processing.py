@@ -3,7 +3,7 @@ import pandas as pd
 #This will make american bankrupcty csv into a dataframe we can use
 df = pd.read_csv('american_bankruptcy.csv')
 
-#we need to clean the data and check for errors, nulls and so_on
+#we need to clean the data and check for errors, nulls and so on
 
 
 #reframing the dataframe into a collection of smaller dataframes 
