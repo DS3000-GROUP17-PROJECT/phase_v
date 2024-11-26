@@ -151,13 +151,13 @@ def dimension_2_1_transform(subdf):
 def full_transform(df):
     rows = df.shape[0]
     
-    subdf = df['subdataframe'][0]
+    subdf = df.loc[0,'subdataframe']
     subdf = time_feature_transform(subdf)
     final_subdict = dimension_2_1_transform(subdf)
     rows_to_drop = []
 
-    for row in range(rows):
-        subdf = df['subdataframe'][row]
+    for row in range(1,rows):
+        subdf = df.loc[row,'subdataframe']
         if subdf.shape[0] < 3:
             rows_to_drop.append(row)
         else:
@@ -189,4 +189,4 @@ df = full_transform(df)
     df = full_transform(df)
     return df"""
 
-print(df['subdataframe'][0].head())
+print(df.head())
