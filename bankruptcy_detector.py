@@ -1,26 +1,21 @@
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
+from sklearn.model_selection import cross_val_score
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class BankruptcyDetector:
     
-    # Program Fields 
     def __init__(self):
-
         # Define the pipeline with StandardScaler and LogisticRegression using L2 regularization
         self.pipeline = Pipeline([
             ('scaler', StandardScaler()),  # Standardize features
-            ('classifier', LogisticRegression(penalty='l2', C=1.0, solver='liblinear', random_state=42))  # Logistic regression with L2 regularization
+            ('classifier', LogisticRegression(penalty='l2', solver='liblinear', random_state=42))  # Logistic regression with L2 regularization
         ])
-
-    # We can account for a way to use data_processing instead of this data splitter. I didnt use it because I wanted to see how accurtate thwe model can be without tracking companies over years
-    # Our model (unless its lying to me) says its 97.3% accurate on the validation set and 97.5% accurate on the test set
-    # Ill keep working on it in a bit, eating rn
 
     def Data_Splitter(self):
         # Load the dataset
@@ -47,8 +42,8 @@ class BankruptcyDetector:
         y_test = test_df['status_label']
 
         return X_train, y_train, X_valid, y_valid, X_test, y_test, df
-    
-    def trainingModel(self,X_train, y_train):
+
+    def trainingModel(self, X_train, y_train):
         # Train the pipeline on the training data
         self.pipeline.fit(X_train, y_train)
 
@@ -62,24 +57,54 @@ class BankruptcyDetector:
         y_pred_test = self.pipeline.predict(X_test)
         return y_pred_test
     
-    def RidgeRegressionCoef(self, feature_names):
-        # Get the coefficients of the logistic regression model
-        coef = self.pipeline.named_steps['classifier'].coef_[0]
-        feature_importance = pd.Series(coef, index=feature_names)
-        feature_importance = feature_importance.sort_values(ascending=False)
-        
-        # Print the coefficients
-        print("Ridge Coefficients:")
-        print(feature_importance)
-        
-        # Plot the coefficients
+    def RidgeRegressionCoef(self, X, y):
+        # Define the range of regularization coefficients
+        lambda_values = np.logspace(-8, 6, 15)  # 15 values from exp(-8) to exp(6)
+
+        # Initialize an array to store mean squared errors
+        mse_list = []
+
+        # Perform 10-fold CV for each λ value
+        for lam in lambda_values:
+            self.pipeline.set_params(classifier__C=1/lam)  # Set the inverse of lambda as C
+            mse_scores = cross_val_score(self.pipeline, X, y, cv=10, scoring='neg_mean_squared_error')
+            mean_mse = -mse_scores.mean()  # Negate because cross_val_score returns negative MSE
+            mse_list.append(mean_mse)
+
+        # Plot mean squared error vs log(λ)
         plt.figure(figsize=(10, 6))
-        sns.barplot(x=feature_importance.values, y=feature_importance.index)
-        plt.title('Ridge Coefficients for Logistic Regression')
-        plt.xlabel('Coefficient Value')
-        plt.ylabel('Feature')
+        plt.plot(np.log(lambda_values), mse_list, marker='o')
+        plt.title('Mean Squared Error vs log(λ)')
+        plt.xlabel('log(λ)')
+        plt.ylabel('Mean Squared Error')
+        plt.grid(True)
         plt.show()
-    
+
+        # Determine the best regularization parameter
+        best_lambda = lambda_values[np.argmin(mse_list)]
+        best_mse = min(mse_list)
+
+        print(f"Best regularization parameter (λ): {best_lambda:.6f}")
+        print(f"Corresponding Mean Squared Error: {best_mse:.4f}")
+
+    def plotPRC(self, X, y):
+        # Get the predicted probabilities
+        y_scores = self.pipeline.predict_proba(X)[:, 1]
+
+        # Calculate precision-recall curve
+        precision, recall, _ = precision_recall_curve(y, y_scores)
+        prc_auc = auc(recall, precision)
+
+        # Plot the precision-recall curve
+        plt.figure(figsize=(10, 6))
+        plt.plot(recall, precision, marker='.', label=f'PRC (AUC = {prc_auc:.2f})')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title('Precision-Recall Curve')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
     def main(self):
         # Storing all the split data into a holder array
         ArrayOfSplitData = self.Data_Splitter()
@@ -96,6 +121,9 @@ class BankruptcyDetector:
         X_test = ArrayOfSplitData[4]
         y_test = ArrayOfSplitData[5]
 
+        # Declaring the full dataframe
+        df = ArrayOfSplitData[6]
+
         # Calling the training model function (Training)
         self.trainingModel(X_train, y_train)
 
@@ -105,22 +133,23 @@ class BankruptcyDetector:
         # Calling the predict model function (Test)
         y_pred_test = self.predictModel(X_test)
 
-
         # Evaluate the model on the validation set
         print("Validation Set Metrics:")
         print("Accuracy:", accuracy_score(y_valid, y_pred_valid))
         print("Classification Report:\n", classification_report(y_valid, y_pred_valid))
         print("Confusion Matrix:\n", confusion_matrix(y_valid, y_pred_valid))
 
-       # Evaluate the model on the test set
+        # Evaluate the model on the test set
         print("\nTest Set Metrics:")
         print("Accuracy:", accuracy_score(y_test, y_pred_test))
         print("Classification Report:\n", classification_report(y_test, y_pred_test))
         print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
 
         # Analyze the ridge coefficients
-        feature_names = X_train.columns
-        self.RidgeRegressionCoef(feature_names)
+        #self.RidgeRegressionCoef(X_train, y_train)
+
+        # Plot the Precision-Recall Curve
+        self.plotPRC(X_test, y_test)
 
 if __name__ == "__main__":
     BankruptcyDetector().main()
