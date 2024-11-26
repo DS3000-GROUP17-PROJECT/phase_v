@@ -8,8 +8,6 @@ from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-#The main assumption made from our dataset is that bankruptcy/non-bankruptcy
-#  is the outcome of the year after the latest reported year.
 class BankruptcyDetector:
     
     def __init__(self):
@@ -28,20 +26,47 @@ class BankruptcyDetector:
         df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
         df = df.sort_values(by=['company_name', 'year']).reset_index(drop=True)
 
-        # Split data into training, validation, and test sets by year (as the dataset recommends)
-        train_df = df[df['year'] <= 2011]
-        valid_df = df[(df['year'] > 2011) & (df['year'] <= 2014)]
-        test_df = df[df['year'] > 2014]
+        # Aggregate data by company name and year to create a single row per company
+        aggregated_data = df.groupby('company_name').agg({
+            'year': list,
+            'current_assets': list,
+            'cost_of_goods_sold': list,
+            'depreciation': list,
+            'ebitda': list,
+            'inventory': list,
+            'net_income': list,
+            'total_receivables': list,
+            'market_value': list,
+            'net_sales': list,
+            'total_assets': list,
+            'total_long_term_debt': list,
+            'earnings_before_interest_and_taxes': list,
+            'gross_profit': list,
+            'total_current_liabilities': list,
+            'retained_earnings': list,
+            'total_revenue': list,
+            'status_label': 'first'
+        }).reset_index()
+
+        # Feature engineering: Calculate differences between consecutive years
+        for col in aggregated_data.columns[2:-1]:  # Skip 'company_name', 'year', and 'status_label'
+            aggregated_data[col + '_diff'] = aggregated_data[col].apply(lambda x: np.diff(x).tolist())
+
+        # Flatten the lists into individual columns
+        feature_cols = []
+        for col in aggregated_data.columns[2:-1]:  # Skip 'company_name', 'year', and 'status_label'
+            max_len = max(aggregated_data[col].apply(len))
+            for i in range(max_len):
+                aggregated_data[col + f'_{i}'] = aggregated_data[col].apply(lambda x: x[i] if i < len(x) else np.nan)
+                feature_cols.append(col + f'_{i}')
 
         # Prepare features and labels
-        X_train = train_df.drop(columns=['status_label', 'company_name', 'year'])
-        y_train = train_df['status_label']
+        X = aggregated_data[feature_cols]
+        y = aggregated_data['status_label']
 
-        X_valid = valid_df.drop(columns=['status_label', 'company_name', 'year'])
-        y_valid = valid_df['status_label']
-
-        X_test = test_df.drop(columns=['status_label', 'company_name', 'year'])
-        y_test = test_df['status_label']
+        # Split data into training, validation, and test sets
+        X_train, X_valid, X_test = np.split(X, [int(.6*len(X)), int(.8*len(X))])
+        y_train, y_valid, y_test = np.split(y, [int(.6*len(y)), int(.8*len(y))])
 
         return X_train, y_train, X_valid, y_valid, X_test, y_test, df
 
@@ -148,7 +173,7 @@ class BankruptcyDetector:
         print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
 
         # Analyze the ridge coefficients
-        #self.RidgeRegressionCoef(X_train, y_train)
+        self.RidgeRegressionCoef(X_train, y_train)
 
         # Plot the Precision-Recall Curve
         self.plotPRC(X_test, y_test)
