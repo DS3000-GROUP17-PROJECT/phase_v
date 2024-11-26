@@ -7,6 +7,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
+#The main assumption made from our dataset is that bankruptcy/non-bankruptcy
+#  is the outcome of the year after the latest reported year.
 class BankruptcyDetector:
     
     # Program Fields 
