@@ -21,30 +21,57 @@ class BankruptcyDetector:
         # Load the dataset
         df = pd.read_csv('american_bankruptcy.csv')
 
+        # Rename the columns to make it easier to understand
+        df.columns = [
+            "company_name", 
+            "status_label", 
+            "year",
+            "Current Assets", 
+            "Cost of Goods Sold", 
+            "Depreciation", 
+            "EBITDA", 
+            "Inventory", 
+            "Net Income", 
+            "Total Receivables",
+            "Market Value", 
+            "Net Sales", 
+            "Total Assets", 
+            "Total Long Term Debt",
+            "Earnings Before Interest & Taxes", 
+            "Gross Profit", 
+            "Total Current Liabilities", 
+            "Retained Earnings", 
+            "Total Revenue", 
+            "Total Liabilities", 
+            "Total Operating Expenses"
+        ]
+
         # Preprocess the dataset
         df['company_name'] = df['company_name'].str.replace("C_", "").astype(int)
         df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
         df = df.sort_values(by=['company_name', 'year']).reset_index(drop=True)
 
-        # Aggregate data by company name and year to create a single row per company
+        # Aggregate data by company
         aggregated_data = df.groupby('company_name').agg({
             'year': list,
-            'current_assets': list,
-            'cost_of_goods_sold': list,
-            'depreciation': list,
-            'ebitda': list,
-            'inventory': list,
-            'net_income': list,
-            'total_receivables': list,
-            'market_value': list,
-            'net_sales': list,
-            'total_assets': list,
-            'total_long_term_debt': list,
-            'earnings_before_interest_and_taxes': list,
-            'gross_profit': list,
-            'total_current_liabilities': list,
-            'retained_earnings': list,
-            'total_revenue': list,
+            'Current Assets': list,
+            'Cost of Goods Sold': list,
+            'Depreciation': list,
+            'EBITDA': list,
+            'Inventory': list,
+            'Net Income': list,
+            'Total Receivables': list,
+            'Market Value': list,
+            'Net Sales': list,
+            'Total Assets': list,
+            'Total Long Term Debt': list,
+            'Earnings Before Interest & Taxes': list,
+            'Gross Profit': list,
+            'Total Current Liabilities': list,
+            'Retained Earnings': list,
+            'Total Revenue': list,
+            'Total Liabilities': list,
+            'Total Operating Expenses': list,
             'status_label': 'first'
         }).reset_index()
 
