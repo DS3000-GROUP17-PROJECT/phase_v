@@ -91,9 +91,12 @@ for company, group in df_filtered.groupby('company_id'):
 
 #create the final dataframe
 result_df = pd.DataFrame(result)
-df = df.dropna()
+result_df = result_df.dropna()
 result_df = result_df.reset_index(drop=True)
 
 #output the result
 def final_df():
     return result_df
+
+#Final dataframe has 6553 companies
+
