@@ -3,181 +3,97 @@ import numpy as np
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 
-
-#This will make american bankrupcty csv into a dataframe we can use
-#we have already checked that this data is clean and does not contain nulls or errors
+#bring in the csv
 df = pd.read_csv('american_bankruptcy.csv')
 
-#reframing the dataframe into a collection of smaller dataframes 
-#reframing the data will help us analyze the data from 3 dimensions
-#companies, features and time
+#make string company name into an integer company id
+df['company_id'] = df['company_name'].str.extract(r'(\d+)').astype(int)
 
-def data_reframing(df):
+#sort by `company_id` and `year`
+df = df.sort_values(by=['company_id', 'year']).reset_index(drop=True)
 
-    #removing all the "C_" from the start of the company_name and making them into integers
-    for index, row in df.iterrows():
-        if row['company_name'].startswith("C_"):
-            df.loc[index, 'company_name'] = int(row['company_name'][2:])
+#filter companies appearing less than 3 times
+df_filtered = df.groupby('company_id').filter(lambda x: len(x) >= 3)
 
-    #we need the set of columns for the subdataframes without the company_name column
-    columns = df.columns.tolist()
-    columns = [col for col in columns if col != 'company_name']
+#initialize the new dataframe
+result = []
 
-    #we need a dictionary to convert into our final df
-    new_df_dict = {'company_id':[],'status_label':[],'subdataframe' :[]}
-    
-    #we need the number of companies for logical purposes
-    num_companies = df['company_name'].nunique()
+#process each company
+for company, group in df_filtered.groupby('company_id'):
+    group = group.sort_values('year')  # Sort by year within each company
+    M = len(group)
+    latest_status = group['status_label'].iloc[-1]
+    features = {}
 
-    #create a structure for the dictionary for the final df
-    for x in range(1, num_companies + 1):
-        new_df_dict['company_id'].append(x)
-        new_df_dict['subdataframe'].append({col: [] for col in columns})
+    #iterate over each feature X1 to X18
+    for Xn in [f'X{i}' for i in range(1, 19) if f'X{i}' in group.columns]:
+        x_values = group[Xn].values
+        years = group['year'].values
+        t = years - years[-1]  # Adjust time with respect to the latest year
 
-    #we need number of rows for logical purposes
-    num_rows = df.shape[0]
+        #A0, A1, A2
+        #These are the instantaneous coefficients
+        #A0 is the last reported instance
+        #A1 is the last reported difference
+        #A2 is the last reported second order difference
+        A0 = x_values[-1]
+        A1 = x_values[-1] - x_values[-2] if M > 1 else np.nan
+        A2 = (x_values[-1] - x_values[-3]) / 2 if M > 2 else np.nan
 
-    #for all rows we need to extract data and put into dictionaries for the new subdataframes
-    for x in range(num_rows):
-        company_id = df.loc[x,'company_name']
-        
-        for y in columns:
-            new_df_dict['subdataframe'][company_id - 1][y].append(df.loc[x,y])
+        #B0, B1, B2
+        #There are the discrete weighted average coefficients
+        #B1 is the weight average sum of points
+        #B2 is the weighted average sum of differences
+        #B3 is the weighted average sum of second order differences
+        weights = 1 / np.arange(1, M + 1)
+        B0 = np.sum(weights * x_values) / np.sum(weights)
+        B1 = (
+            np.sum(weights[:-1] * (x_values[:-1] - x_values[1:])) / np.sum(weights[:-1])
+            if M > 1
+            else np.nan
+        )
+        B2 = (
+            np.sum(weights[:-2] * (x_values[:-2] - x_values[2:])) / np.sum(weights[:-2])
+            if M > 2
+            else np.nan
+        )
 
-    #turn these dictionaries into subdataframes and make a list of subdataframes
-    subdf_list = []
-    for subdf_data in new_df_dict['subdataframe']:
-        subdf = pd.DataFrame(subdf_data)
-        subdf_list.append(subdf)
+        #C0, C1, C2, C3
+        #These are the fitted polynomial coefficients
+        #A continuous function may give an accurate prediction
 
-    for subdf in subdf_list:
-        # Get the 'status_label' from the last row
-        status = subdf.iloc[-1]['status_label']
-        new_df_dict['status_label'].append(status)  # Append to dictionary
-        
-    # Remove 'status_label' from all sub-DataFrames in one go
-    subdf_list = [subdf.drop(columns=['status_label']) for subdf in subdf_list]
-
-    # Update the dictionary with the cleaned sub-DataFrames
-    new_df_dict['subdataframe'] = subdf_list
-
-
-    #make the final dataframe
-    final_df = pd.DataFrame(new_df_dict)
-
-    return final_df
-
-#we need to transform each subdataframe from the time domain to a new feature domain.
-
-def time_feature_transform(subdf):
-    #The following objects are needed for logical purposes
-    n = subdf.shape[0]  # number of rows
-    columns = subdf.shape[1]  # number of columns
-    x = subdf['year'].reset_index(drop=True).tolist()
-    c = x[-1]
-
-    x_transformed = [(j - c) for j in x]
-    x_transformed = np.array(x_transformed).reshape(-1, 1)
-    
-    output_dict = {}
-
-    for y in range (columns):
-        if subdf.columns[y] != 'year':
-            #The 'A' set of coefficients are the final values of a company's report
-            #A0 is the final value
-            #A1 is the difference between the last and the second last value
-            #A2 is the difference between the last and third last value divided by 2, the second order difference
-            A0 = subdf.iloc[-1,y]
-            A1 = subdf.iloc[-2,y] - A0
-            A2 = (subdf.iloc[-3,y] - A0)/2
-
-            #The 'B' set of coefficients are the weighted average of a company's report
-            #The weight is 1/(the year's before the last report + 1)
-            #ex. the year before has a weight of 1/2, 2 years before has a weight of 1/3
-            #B0 is the weighted average of individual data points
-            #B1 is the weighted average of the differences between subsequent points
-            #B2 is the weighted average of the second-order differences
-            B0 = sum((1 / k) * subdf.iloc[-k, y] for k in range(1, n + 1)) / sum((1 / k) for k in range(1, n + 1))
-            B1 = sum((1 / k) * (subdf.iloc[-(k+1), y] - subdf.iloc[-k, y]) for k in range(1, n)) / sum((1 / k) for k in range(1, n))
-            B2 = sum((1 / k) * (subdf.iloc[-(k+2), y] - subdf.iloc[-k, y]) for k in range(1, n - 1)) / sum((1 / k) for k in range(1, n - 1))
-            
-            #The 'C' set of coefficients are the coefficients of a curve fitting to the datasets
-            #This helps us analyze the data points from a continuous perspective
-            #we use scikitlearn to fit a polynomial to the each column
+        if M > 3:
             poly = PolynomialFeatures(degree=3)
-            x_poly = poly.fit_transform(x_transformed.reshape(-1, 1))
-
-            model = LinearRegression()
-            model.fit(x_poly, subdf.iloc[:, y])
-            
-            #The following coefficients are meant to fit the graph:
-            #Y(x-c) = C0 + C1x + C2x^2 + C3x^3
-            #where c is the last year reported by the company
-            C0 = model.intercept_
-
-            coefficients = model.coef_
-            C1 = coefficients[1]
-            C2 = coefficients[2]
-            C3 = coefficients[3]
-
-            output_dict[subdf.columns[y]] = [A0,A1,A2,B0,B1,B2,C0,C1,C2,C3]
-        
-    final_subdf = pd.DataFrame(output_dict)
-    return final_subdf
-
-#Now that the dataframe is no longer time-dependent, the dataframe no longer has 3 dimensions
-#The dataframe now has 2 dimensions: companies and features
-
-def dimension_2_1_transform(subdf):
-    final_dict = {}
-
-#10 new columns for every old column, representing a 10 features for every previous feature.
-    for col in subdf.columns:
-        final_dict[(col + 'A0')] = subdf[col][0]
-        final_dict[(col + 'A1')] = subdf[col][1]
-        final_dict[(col + 'A2')] = subdf[col][2]
-        final_dict[(col + 'B0')] = subdf[col][3]
-        final_dict[(col + 'B1')] = subdf[col][4]
-        final_dict[(col + 'B2')] = subdf[col][5]
-        final_dict[(col + 'C0')] = subdf[col][6]
-        final_dict[(col + 'C1')] = subdf[col][7]
-        final_dict[(col + 'C2')] = subdf[col][8]
-        final_dict[(col + 'C3')] = subdf[col][9]
-
-    return final_dict
-
-def final_process(df):
-
-    df = data_reframing(df)
-
-    rows = df.shape[0]
-        
-    subdf = df.loc[0,'subdataframe']
-    
-    subdf = time_feature_transform(subdf)
-    final_subdict = dimension_2_1_transform(subdf)
-
-    rows_to_drop = []
-
-    for row in range(1,rows):
-        subdf = df.loc[row,'subdataframe']
-        if subdf.shape[0] < 3:
-            rows_to_drop.append(row)
+            X_poly = poly.fit_transform(t.reshape(-1, 1))
+            model = LinearRegression().fit(X_poly, x_values)
+            C0, C1, C2, C3 = model.intercept_, *model.coef_[1:]
         else:
-            subdf = time_feature_transform(subdf)
-            subdf_dict = dimension_2_1_transform(subdf)
+            C0, C1, C2, C3 = [np.nan] * 4
 
-            for key in subdf_dict:
-                final_subdict[key] = [final_subdict[key],subdf_dict[key]]
+        #add to features dictionary
+        features.update(
+            {
+                f'{Xn}A0': A0,
+                f'{Xn}A1': A1,
+                f'{Xn}A2': A2,
+                f'{Xn}B0': B0,
+                f'{Xn}B1': B1,
+                f'{Xn}B2': B2,
+                f'{Xn}C0': C0,
+                f'{Xn}C1': C1,
+                f'{Xn}C2': C2,
+                f'{Xn}C3': C3,
+            }
+        )
 
+    #append to result
+    result.append({'company_id': company, 'status_label': latest_status, **features})
 
-    final_df = df.drop(rows_to_drop)
-    final_df.drop(columns='subdataframe', inplace=True)
-    subdf_reframed = pd.DataFrame(final_subdict)
-    final_df = pd.concat([final_df, subdf_reframed])
+#create the final dataframe
+result_df = pd.DataFrame(result)
+df = df.dropna()
+result_df = result_df.reset_index(drop=True)
 
-    return final_subdict
-    
-thing = final_process(df)
-
-print(thing['X1A0'])
+#output the result
+def final_df():
+    return result_df
