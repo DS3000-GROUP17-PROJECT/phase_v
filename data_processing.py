@@ -56,7 +56,7 @@ def data_reframing(df):
         new_df_dict['status_label'].append(status)  # Append to dictionary
         
     # Remove 'status_label' from all sub-DataFrames in one go
-    subdf_list = [subdf.drop(columns=['status_label'], inplace = True) for subdf in subdf_list]
+    subdf_list = [subdf.drop(columns=['status_label']) for subdf in subdf_list]
 
     # Update the dictionary with the cleaned sub-DataFrames
     new_df_dict['subdataframe'] = subdf_list
@@ -67,19 +67,18 @@ def data_reframing(df):
 
     return final_df
 
-df = data_reframing(df)
-
 #we need to transform each subdataframe from the time domain to a new feature domain.
 
 def time_feature_transform(subdf):
     #The following objects are needed for logical purposes
     n = subdf.shape[0]  # number of rows
     columns = subdf.shape[1]  # number of columns
-    x = subdf['year']
+    x = subdf['year'].reset_index(drop=True).tolist()
     c = x[-1]
 
-    x_transformed = x - c
-
+    x_transformed = [(j - c) for j in x]
+    x_transformed = np.array(x_transformed).reshape(-1, 1)
+    
     output_dict = {}
 
     for y in range (columns):
@@ -106,17 +105,17 @@ def time_feature_transform(subdf):
             #This helps us analyze the data points from a continuous perspective
             #we use scikitlearn to fit a polynomial to the each column
             poly = PolynomialFeatures(degree=3)
-            x_poly = poly.fit_transform(x_transformed)
+            x_poly = poly.fit_transform(x_transformed.reshape(-1, 1))
 
             model = LinearRegression()
             model.fit(x_poly, subdf.iloc[:, y])
-
-            coefficients = model.coef_
-        
+            
             #The following coefficients are meant to fit the graph:
             #Y(x-c) = C0 + C1x + C2x^2 + C3x^3
             #where c is the last year reported by the company
-            C0 = coefficients[0]
+            C0 = model.intercept_
+
+            coefficients = model.coef_
             C1 = coefficients[1]
             C2 = coefficients[2]
             C3 = coefficients[3]
@@ -147,13 +146,17 @@ def dimension_2_1_transform(subdf):
 
     return final_dict
 
-#Now a final transform is necessary 
-def full_transform(df):
+def final_process(df):
+
+    df = data_reframing(df)
+
     rows = df.shape[0]
-    
+        
     subdf = df.loc[0,'subdataframe']
+    
     subdf = time_feature_transform(subdf)
     final_subdict = dimension_2_1_transform(subdf)
+
     rows_to_drop = []
 
     for row in range(1,rows):
@@ -164,29 +167,17 @@ def full_transform(df):
             subdf = time_feature_transform(subdf)
             subdf_dict = dimension_2_1_transform(subdf)
 
-            for key in final_subdict:
+            for key in subdf_dict:
                 final_subdict[key] = [final_subdict[key],subdf_dict[key]]
 
-    final_df = df
 
-    if rows_to_drop != []:
-        final_df.drop(index=rows_to_drop, inplace=True)
-
-    final_df.drop(columns = ['subdataframe'], implace = True)
+    final_df = df.drop(rows_to_drop)
+    final_df.drop(columns='subdataframe', inplace=True)
     subdf_reframed = pd.DataFrame(final_subdict)
     final_df = pd.concat([final_df, subdf_reframed])
 
-    return final_df
-            
+    return final_subdict
+    
+thing = final_process(df)
 
-df = full_transform(df)
-
-#make df a method that we can use to access the processed dataframe for the bankruptcy detector
-
-"""def processed_df():
-    df = pd.read_csv('american_bankruptcy.csv')
-    df = data_reframing(df)
-    df = full_transform(df)
-    return df"""
-
-print(df.head())
+print(thing['X1A0'][:5])
