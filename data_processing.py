@@ -180,4 +180,4 @@ def final_process(df):
     
 thing = final_process(df)
 
-print(thing['X1A0'][:5])
+print(thing['X1A0'])
