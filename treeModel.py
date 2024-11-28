@@ -7,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGra
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 import seaborn as sns
-from imblearn.over_sampling import SMOTE
+#from imblearn.over_sampling import SMOTE
 
 class TreeBankruptcyDetector:
     
@@ -144,11 +144,11 @@ class TreeBankruptcyDetector:
 
     def trainingModel(self, X_train, y_train):
         # Apply SMOTE to the training data
-        smote = SMOTE(random_state=42)
-        X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
+        #smote = SMOTE(random_state=42)
+        #X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 
         # Train the pipeline on the resampled training data
-        self.pipeline.fit(X_train_resampled, y_train_resampled)
+        self.pipeline.fit(X_train, y_train)
 
     def validateModel(self, X_valid):
         # Make prediction on the validation set
