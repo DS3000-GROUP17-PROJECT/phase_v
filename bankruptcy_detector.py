@@ -14,9 +14,10 @@ class BankruptcyDetector:
     def __init__(self):
         # Define the pipeline with StandardScaler and LogisticRegression
         self.pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('classifier', LogisticRegression(penalty='l2', solver='liblinear', random_state=42))
+        ('scaler', StandardScaler()),  
+        ('classifier', LogisticRegression(penalty='l2', solver='liblinear', random_state=42, class_weight='balanced'))  # Custom class weights
         ])
+
 
     def Data_Splitter(self):
         # Load the dataset

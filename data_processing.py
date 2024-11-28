@@ -5,6 +5,7 @@ from sklearn.linear_model import LinearRegression
 
 #bring in the csv
 df = pd.read_csv('american_bankruptcy.csv')
+df.drop(columns=['X4','X13','X15','X16'], inplace=True)
 
 #make string company name into an integer company id
 df['company_id'] = df['company_name'].str.extract(r'(\d+)').astype(int)
@@ -61,15 +62,15 @@ for company, group in df_filtered.groupby('company_id'):
         #C0, C1, C2, C3
         #These are the fitted polynomial coefficients
         #A continuous function may give an accurate prediction
-
+        
         if M > 3:
-            poly = PolynomialFeatures(degree=3)
+            poly = PolynomialFeatures(degree=2)
             X_poly = poly.fit_transform(t.reshape(-1, 1))
             model = LinearRegression().fit(X_poly, x_values)
-            C0, C1, C2, C3 = model.intercept_, *model.coef_[1:]
+            C0, C1, C2 = model.intercept_, *model.coef_[1:]
         else:
-            C0, C1, C2, C3 = [np.nan] * 4
-
+            C0, C1, C2 = [np.nan] * 3
+        
         #add to features dictionary
         features.update(
             {
@@ -82,7 +83,7 @@ for company, group in df_filtered.groupby('company_id'):
                 f'{Xn}C0': C0,
                 f'{Xn}C1': C1,
                 f'{Xn}C2': C2,
-                f'{Xn}C3': C3,
+                #f'{Xn}C3': C3,
             }
         )
 
