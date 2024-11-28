@@ -38,16 +38,16 @@ for company, group in df_filtered.groupby('company_id'):
         #A0 is the last reported instance
         #A1 is the last reported difference
         #A2 is the last reported second order difference
-        #A0 = x_values[-1]
-        #A1 = x_values[-1] - x_values[-2] if M > 1 else np.nan
-        #A2 = (x_values[-1] - x_values[-3]) / 2 if M > 2 else np.nan
+        A0 = x_values[-1]
+        A1 = x_values[-1] - x_values[-2] if M > 1 else np.nan
+        A2 = (x_values[-1] - x_values[-3]) / 2 if M > 2 else np.nan
 
         #B0, B1, B2
         #There are the discrete weighted average coefficients
         #B1 is the weight average sum of points
         #B2 is the weighted average sum of differences
         #B3 is the weighted average sum of second order differences
-        """
+        
         weights = 1 / np.arange(1, M + 1)
         B0 = np.sum(weights * x_values) / np.sum(weights)
         B1 = (
@@ -60,33 +60,32 @@ for company, group in df_filtered.groupby('company_id'):
             if M > 2
             else np.nan
         )
-        """
+        
         #C0, C1, C2, C3
         #These are the fitted polynomial coefficients
         #A continuous function may give an accurate prediction
         
         if M > 3:
-            poly = PolynomialFeatures(degree=4)
+            poly = PolynomialFeatures(degree=3)
             X_poly = poly.fit_transform(t.reshape(-1, 1))
             model = LinearRegression().fit(X_poly, x_values)
-            C0, C1, C2, C3, C4 = model.intercept_, *model.coef_[1:]
+            C0, C1, C2, C3 = model.intercept_, *model.coef_[1:]
         else:
-            C0, C1, C2, C3, C4 = [np.nan] * 5
+            C0, C1, C2, C3 = [np.nan] * 4
         
         #add to features dictionary
         features.update(
             {
-                #f'{Xn}A0': A0,
-                #f'{Xn}A1': A1,
-                #f'{Xn}A2': A2,
-                #f'{Xn}B0': B0,
-                #f'{Xn}B1': B1,
-                #f'{Xn}B2': B2,
+                f'{Xn}A0': A0,
+                f'{Xn}A1': A1,
+                f'{Xn}A2': A2,
+                f'{Xn}B0': B0,
+                f'{Xn}B1': B1,
+                f'{Xn}B2': B2,
                 f'{Xn}C0': C0,
                 f'{Xn}C1': C1,
                 f'{Xn}C2': C2,
-                f'{Xn}C3': C3,
-                f'{Xn}C4': C4
+                f'{Xn}C3': C3
             }
         )
 
@@ -103,4 +102,5 @@ def final_df():
     return result_df
 
 #Final dataframe has 6553 companies
+print(result_df)
 
