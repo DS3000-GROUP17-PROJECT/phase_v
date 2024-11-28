@@ -38,9 +38,9 @@ for company, group in df_filtered.groupby('company_id'):
         #A0 is the last reported instance
         #A1 is the last reported difference
         #A2 is the last reported second order difference
-        A0 = x_values[-1]
-        A1 = x_values[-1] - x_values[-2] if M > 1 else np.nan
-        A2 = (x_values[-1] - x_values[-3]) / 2 if M > 2 else np.nan
+        #A0 = x_values[-1]
+        #A1 = x_values[-1] - x_values[-2] if M > 1 else np.nan
+        #A2 = (x_values[-1] - x_values[-3]) / 2 if M > 2 else np.nan
 
         #B0, B1, B2
         #There are the discrete weighted average coefficients
@@ -63,7 +63,7 @@ for company, group in df_filtered.groupby('company_id'):
         #C0, C1, C2, C3
         #These are the fitted polynomial coefficients
         #A continuous function may give an accurate prediction
-        
+        """
         if M > 3:
             poly = PolynomialFeatures(degree=2)
             X_poly = poly.fit_transform(t.reshape(-1, 1))
@@ -71,19 +71,19 @@ for company, group in df_filtered.groupby('company_id'):
             C0, C1, C2 = model.intercept_, *model.coef_[1:]
         else:
             C0, C1, C2 = [np.nan] * 3
-        
+        """
         #add to features dictionary
         features.update(
             {
-                f'{Xn}A0': A0,
-                f'{Xn}A1': A1,
-                f'{Xn}A2': A2,
+                #f'{Xn}A0': A0,
+                #f'{Xn}A1': A1,
+                #f'{Xn}A2': A2,
                 f'{Xn}B0': B0,
                 f'{Xn}B1': B1,
                 f'{Xn}B2': B2,
-                f'{Xn}C0': C0,
-                f'{Xn}C1': C1,
-                f'{Xn}C2': C2,
+                #f'{Xn}C0': C0,
+                #f'{Xn}C1': C1,
+                #f'{Xn}C2': C2,
                 #f'{Xn}C3': C3,
             }
         )
