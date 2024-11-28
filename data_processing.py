@@ -66,12 +66,12 @@ for company, group in df_filtered.groupby('company_id'):
         #A continuous function may give an accurate prediction
         
         if M > 3:
-            poly = PolynomialFeatures(degree=3)
+            poly = PolynomialFeatures(degree=4)
             X_poly = poly.fit_transform(t.reshape(-1, 1))
             model = LinearRegression().fit(X_poly, x_values)
-            C0, C1, C2, C3 = model.intercept_, *model.coef_[1:]
+            C0, C1, C2, C3, C4 = model.intercept_, *model.coef_[1:]
         else:
-            C0, C1, C2, C3 = [np.nan] * 4
+            C0, C1, C2, C3, C4 = [np.nan] * 5
         
         #add to features dictionary
         features.update(
@@ -86,6 +86,7 @@ for company, group in df_filtered.groupby('company_id'):
                 f'{Xn}C1': C1,
                 f'{Xn}C2': C2,
                 f'{Xn}C3': C3,
+                f'{Xn}C4': C4
             }
         )
 
