@@ -47,6 +47,7 @@ for company, group in df_filtered.groupby('company_id'):
         #B1 is the weight average sum of points
         #B2 is the weighted average sum of differences
         #B3 is the weighted average sum of second order differences
+        """
         weights = 1 / np.arange(1, M + 1)
         B0 = np.sum(weights * x_values) / np.sum(weights)
         B1 = (
@@ -59,32 +60,32 @@ for company, group in df_filtered.groupby('company_id'):
             if M > 2
             else np.nan
         )
-
+        """
         #C0, C1, C2, C3
         #These are the fitted polynomial coefficients
         #A continuous function may give an accurate prediction
-        """
+        
         if M > 3:
-            poly = PolynomialFeatures(degree=2)
+            poly = PolynomialFeatures(degree=3)
             X_poly = poly.fit_transform(t.reshape(-1, 1))
             model = LinearRegression().fit(X_poly, x_values)
-            C0, C1, C2 = model.intercept_, *model.coef_[1:]
+            C0, C1, C2, C3 = model.intercept_, *model.coef_[1:]
         else:
-            C0, C1, C2 = [np.nan] * 3
-        """
+            C0, C1, C2, C3 = [np.nan] * 4
+        
         #add to features dictionary
         features.update(
             {
                 #f'{Xn}A0': A0,
                 #f'{Xn}A1': A1,
                 #f'{Xn}A2': A2,
-                f'{Xn}B0': B0,
-                f'{Xn}B1': B1,
-                f'{Xn}B2': B2,
-                #f'{Xn}C0': C0,
-                #f'{Xn}C1': C1,
-                #f'{Xn}C2': C2,
-                #f'{Xn}C3': C3,
+                #f'{Xn}B0': B0,
+                #f'{Xn}B1': B1,
+                #f'{Xn}B2': B2,
+                f'{Xn}C0': C0,
+                f'{Xn}C1': C1,
+                f'{Xn}C2': C2,
+                f'{Xn}C3': C3,
             }
         )
 
