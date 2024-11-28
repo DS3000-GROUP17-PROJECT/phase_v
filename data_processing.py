@@ -7,6 +7,7 @@ from sklearn.linear_model import LinearRegression
 df = pd.read_csv('american_bankruptcy.csv')
 df.drop(columns=['X4','X13','X15','X16'], inplace=True)
 
+
 #make string company name into an integer company id
 df['company_id'] = df['company_name'].str.extract(r'(\d+)').astype(int)
 
