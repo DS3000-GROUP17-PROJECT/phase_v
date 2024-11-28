@@ -7,11 +7,12 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGra
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 import seaborn as sns
+from imblearn.over_sampling import SMOTE
 
 class TreeBankruptcyDetector:
     
     def __init__(self):
-    #Classifier with L2 regularization - LogisticRegression(penalty='l2', random_state=42,)
+    #replace string to change model - Classifier with L2 regularization - "LogisticRegression(penalty='l2', random_state=42,)""
     
 
     #Create a pipeline with StandardScaler and RandomForestClassifier
@@ -19,7 +20,7 @@ class TreeBankruptcyDetector:
             ('scaler', StandardScaler()),  # Standardize features
             ('classifier', AdaBoostClassifier(
                 estimator=HistGradientBoostingClassifier(),
-                n_estimators=200,
+                n_estimators=400,
                 random_state=42
             ))
         ])
@@ -128,24 +129,26 @@ class TreeBankruptcyDetector:
         named_data['Total Liabilities'] = named_data['Total Liabilities'] / named_data['count']
         named_data['Total Operating Expenses'] = named_data['Total Operating Expenses'] / named_data['count']
 
-        # Split the data into training, validation, and test sets based on the year
-        train_data = df[df['year'].between(1999, 2011)]
-        valid_data = df[df['year'].between(2012, 2014)]
+        # Split the data into training and test sets based on the year
+        train_data = df[df['year'].between(1999, 2014)]
         test_data = df[df['year'].between(2015, 2018)]
 
         # Prepare the data for logistic regression
         X_train = train_data.drop(columns=['status_label'])
         y_train = train_data['status_label']
-        X_valid = valid_data.drop(columns=['status_label'])
-        y_valid = valid_data['status_label']
+
         X_test = test_data.drop(columns=['status_label'])
         y_test = test_data['status_label']
 
-        return X_train, y_train, X_valid, y_valid, X_test, y_test, df
+        return X_train, y_train, X_test, y_test, df
 
     def trainingModel(self, X_train, y_train):
-        # Train the pipeline on the training data
-        self.pipeline.fit(X_train, y_train)
+        # Apply SMOTE to the training data
+        smote = SMOTE(random_state=42)
+        X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
+
+        # Train the pipeline on the resampled training data
+        self.pipeline.fit(X_train_resampled, y_train_resampled)
 
     def validateModel(self, X_valid):
         # Make prediction on the validation set
@@ -175,19 +178,30 @@ class TreeBankruptcyDetector:
         plt.grid(True)
         plt.show()
 
+    def plotROC(self, X, y):
+        # Get the predicted probabilities
+        y_scores = self.pipeline.predict_proba(X)[:, 1]
+
+        # Calculate ROC curve
+        fpr, tpr, _ = roc_curve(y, y_scores)
+        roc_auc = roc_auc_score(y, y_scores)
+
+        # Plot the ROC curve
+        plt.figure(figsize=(10, 6))
+        plt.plot(fpr, tpr, marker='.', label=f'ROC (AUC = {roc_auc:.2f})')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) Curve')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
     def main():
         detector = TreeBankruptcyDetector()
-        X_train, y_train, X_valid, y_valid, X_test, y_test, df = detector.Data_Splitter()
+        X_train, y_train, X_test, y_test, df = detector.Data_Splitter()
 
         # Train the model
         detector.trainingModel(X_train, y_train)
-
-        # Validate the model
-        y_pred_valid = detector.validateModel(X_valid)
-        print("Validation Set Metrics:")
-        print("Accuracy:", accuracy_score(y_valid, y_pred_valid))
-        print("Classification Report:\n", classification_report(y_valid, y_pred_valid))
-        print("Confusion Matrix:\n", confusion_matrix(y_valid, y_pred_valid))
 
         # Test the model
         y_pred_test = detector.predictModel(X_test)
@@ -198,6 +212,9 @@ class TreeBankruptcyDetector:
 
         # Plot the Precision-Recall Curve
         detector.plotPRC(X_test, y_test)
+
+         # Plot the ROC Curve
+        detector.plotROC(X_test, y_test)
 
 if __name__ == '__main__':
     TreeBankruptcyDetector.main()
