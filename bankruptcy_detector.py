@@ -29,7 +29,7 @@ class BankruptcyDetector:
         df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
 
         # Split data into training and test sets
-        train_df, test_df = train_test_split(df, test_size=0.5, random_state=42)
+        train_df, test_df = train_test_split(df, test_size=0.12, random_state=42)
 
         # Prepare features and labels
         X_train = train_df.drop(columns=['status_label', 'company_id'], errors='ignore')

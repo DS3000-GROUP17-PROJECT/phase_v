@@ -1,116 +1,159 @@
-import pandas as pd
-import numpy as np
 import torch
-from torch import nn
-from sklearn.model_selection import train_test_split
+import torch.nn as nn
+import torch.optim as optim
+import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.utils.class_weight import compute_class_weight
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
+import matplotlib.pyplot as plt
 
-# 1. Load your data into pandas DataFrame (adjust this to your dataset)
-df = pd.read_csv('american_bankruptcy.csv')
+# Load your dataframe
+df = pd.read_csv("american_bankruptcy.csv")
 
-
-# 2. Preprocess the data
-
-# Encode 'status_label' (alive -> 1, failed -> 0)
-df['status_label'] = df['status_label'].map({'alive': 1, 'failed': 0})
-
-# Sort by company_name and year (for time-series modeling)
-df = df.sort_values(by=['company_name', 'year'])
-
-# Normalize the features (18 non-temporal features)
-features_columns = [f'feature_{i}' for i in range(1, 19)]  # Assuming 18 features
+# Preprocessing
+# Normalize X1, X2, ..., X18
 scaler = StandardScaler()
-df[features_columns] = scaler.fit_transform(df[features_columns])
+features = df.iloc[:, 3:].values  # X1 to X18
+features_scaled = scaler.fit_transform(features)
 
-# Create temporal windows for each company: Let's assume a window size of 3 years
-window_size = 3
+# Convert categorical columns into numerical representations
+df['company_name'] = pd.factorize(df['company_name'])[0]
+df['status_label'] = pd.factorize(df['status_label'])[0]
+df['year'] = df['year'].astype('category').cat.codes
 
-# Function to create temporal windows for time series data
-def create_temporal_windows(df, window_size):
-    windowed_data = []
-    for _, group in df.groupby('company_name'):
-        for i in range(len(group) - window_size + 1):
-            windowed_data.append(group.iloc[i:i + window_size])
-    return pd.DataFrame(windowed_data)
+# Prepare input data and target labels
+X = df[['company_name', 'status_label', 'year']].values  # Use company_name, status_label, and year as additional features
+X = torch.tensor(features_scaled, dtype=torch.float32)  # Feature columns X1 to X18
+y = torch.tensor(df['status_label'].values, dtype=torch.long)  # Assuming you want to predict 'status_label'
 
-df_windowed = create_temporal_windows(df, window_size)
+# Reshaping the input data to fit CNN (batch_size, channels, sequence_length)
+X = X.unsqueeze(1)  # Add a channel dimension for the 1D CNN
 
-# Split data into X (features) and y (target)
-X = df_windowed[features_columns].values
-y = df_windowed['status_label'].values
+# Split into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
 
-# Train-test split (stratify to preserve the class balance in both train and test sets)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
-
-# Compute class weights for imbalanced classes
-class_weights = compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
-class_weights = torch.tensor(class_weights, dtype=torch.float)
-
-# Convert data to PyTorch tensors
-X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
-X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
-y_train_tensor = torch.tensor(y_train, dtype=torch.long)
-y_test_tensor = torch.tensor(y_test, dtype=torch.long)
-
-# 3. Define CNN model for feature extraction
+# Define CNN model
 class CNN_Model(nn.Module):
-    def __init__(self, input_size):
+    def __init__(self):
         super(CNN_Model, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=32, kernel_size=3)
-        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3)
-        self.fc1 = nn.Linear(64 * (input_size - 4), 128)  # Adjust size based on window size and kernel
-        self.fc2 = nn.Linear(128, 2)  # Output layer for binary classification (alive vs failed)
+        # 1D Convolution layer
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool1d(kernel_size=2)
+        self.fc1 = nn.Linear(16 * 9, 64)  # Assuming the length of the sequence is 18 (X1 to X18), pooling reduces it
+        self.fc2 = nn.Linear(64, 2)  # 2 output classes (alive, dead)
 
     def forward(self, x):
-        x = x.permute(0, 2, 1)  # Change shape to (batch_size, channels, features) for 1D CNN
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)  # Flatten the tensor
-        x = torch.relu(self.fc1(x))
-        x = self.fc2(x)  # Output raw scores (no softmax)
+        x = self.conv1(x)
+        x = torch.relu(x)
+        x = self.pool(x)
+        x = x.view(-1, 16 * 9)  # Flatten for the fully connected layer
+        x = self.fc1(x)
+        x = torch.relu(x)
+        x = self.fc2(x)
         return x
 
-# 4. Initialize CNN model, loss function, and optimizer
-model = CNN_Model(input_size=X_train_tensor.shape[1])
+# Initialize model, loss, and optimizer
+model = CNN_Model()
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# Define the loss function and optimizer
-criterion = nn.CrossEntropyLoss(weight=class_weights)  # Account for class imbalance
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-# 5. Train the CNN model
-num_epochs = 5
+# Train the model
+num_epochs = 20
 for epoch in range(num_epochs):
     model.train()
     optimizer.zero_grad()
-
-    outputs = model(X_train_tensor)
-    loss = criterion(outputs, y_train_tensor)
+    
+    # Forward pass
+    outputs = model(X_train)
+    loss = criterion(outputs, y_train)
+    
+    # Backward pass and optimization
     loss.backward()
     optimizer.step()
+    
+    if (epoch+1) % 5 == 0:
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
 
-    if (epoch+1) % 1 == 0:
-        print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
-
-# 6. Extract features using the trained CNN model
+# Evaluate the model
+"""
+model.eval()
 with torch.no_grad():
+    y_pred = model(X_test)
+    _, predicted = torch.max(y_pred, 1)
+    accuracy = (predicted == y_test).sum().item() / y_test.size(0)
+    print(f"Test Accuracy: {accuracy * 100:.2f}%")
+"""
+# Extract features from CNN model (not using final layer for classification)
+def extract_features(model, X_data):
     model.eval()
-    cnn_features_train = model.fc1(model.conv2(model.conv1(X_train_tensor).relu()).relu()).numpy()
-    cnn_features_test = model.fc1(model.conv2(model.conv1(X_test_tensor).relu()).relu()).numpy()
+    with torch.no_grad():
+        features = model.conv1(X_data)
+        features = torch.relu(features)
+        features = model.pool(features)
+        features = features.view(features.size(0), -1)  # Flatten for the fully connected layer
+        return features
+    
+# Train the CNN model
+num_epochs = 20
+for epoch in range(num_epochs):
+    model.train()
+    optimizer.zero_grad()
+    
+    # Forward pass
+    outputs = model(X_train)
+    loss = nn.CrossEntropyLoss()(outputs, y_train)
+    
+    # Backward pass and optimization
+    loss.backward()
+    optimizer.step()
+    
+    if (epoch+1) % 5 == 0:
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}")
 
-# 7. Train Logistic Regression on CNN features
-log_reg_model = LogisticRegression(class_weight='balanced', max_iter=1000)
-log_reg_model.fit(cnn_features_train, y_train)
+# Extract CNN features for logistic regression
+X_train_features = extract_features(model, X_train).numpy()
+X_test_features = extract_features(model, X_test).numpy()
 
-# 8. Make predictions on the test set
-y_pred = log_reg_model.predict(cnn_features_test)
+# Logistic Regression model
+log_reg = LogisticRegression(max_iter=1000, class_weight= 'balanced', penalty= 'l2')
 
-# 9. Evaluate the model
+# Train the Logistic Regression model
+log_reg.fit(X_train_features, y_train)
+
+# Make predictions
+y_pred = log_reg.predict(X_test_features)
+y_pred_prod = log_reg.predict_proba(X_test_features)[:, 1]
+
+# Evaluate the model
 accuracy = accuracy_score(y_test, y_pred)
-print(f'Accuracy: {accuracy:.4f}')
-print('Classification Report:')
+print(f"Test Accuracy: {accuracy * 100:.2f}%")
+
+# Classification report
+print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
-print('Confusion Matrix:')
+
+# Confusion Matrix
+print("\nConfusion Matrix:")
 print(confusion_matrix(y_test, y_pred))
+
+# 4-fold Cross-validation
+cv_scores = cross_val_score(log_reg, X_train_features, y_train, cv=4)
+print(f"\nCross-validation scores: {cv_scores}")
+print(f"Average cross-validation score: {cv_scores.mean():.2f}")
+
+def plot_prc(y_true, y_scores):
+    precision, recall, _ = precision_recall_curve(y_true, y_scores)
+    prc_auc = auc(recall, precision)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall, precision, color='b', label=f'PRC (AUC = {prc_auc:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision-Recall Curve')
+    plt.legend(loc='best')
+    plt.grid(True)
+    plt.show()
+
+# Call the plot_prc function
+plot_prc(y_test, y_pred_prod)
