@@ -211,7 +211,7 @@ class DataAggregator:
         X_test = test_data.drop(columns=['status_label'])
         y_test = test_data['status_label']
 
-        return X_train, y_train, X_test, y_test
+        return X_train, y_train, X_test, y_test, df
     
     def main(self):
         self.Data_Aggregator()

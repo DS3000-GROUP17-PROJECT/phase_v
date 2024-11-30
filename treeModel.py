@@ -68,7 +68,7 @@ class TreeBankruptcyDetector:
         detector = TreeBankruptcyDetector()
         data = DataAggregator.DataAggregator()
 
-        X_train, y_train, X_test, y_test = data.Data_Aggregator()
+        X_train, y_train, X_test, y_test, df = data.Data_Aggregator()
 
         # Train the model
         detector.trainingModel(X_train, y_train)
