@@ -22,7 +22,11 @@ class TreeBankruptcyDetector:
     #Create a pipeline with StandardScaler and model of choice 
         self.pipeline = make_pipeline(
             StandardScaler(),
-            LogisticRegression(penalty='l2', random_state=42,)
+            AdaBoostClassifier(
+                estimator=HistGradientBoostingClassifier(),
+                n_estimators=200,
+                random_state=42,
+            )
         )
 
     def Rename_Columns(self):
@@ -59,13 +63,56 @@ class TreeBankruptcyDetector:
         df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
         df = df.sort_values(by=['company_name', 'year']).reset_index(drop=True)
 
-        #make a xslx file with the new data
-        df.to_excel('american_bankruptcy_renamed.xlsx', index=False)
 
         return df
+    
+    def featureCreation(self):
+        # Call the Rename_Columns function to get the data
+        df = self.Rename_Columns()
 
+        #Create 3 Growth Metrics
+        df['Revenue Growth'] = df['Total Revenue'].pct_change().round(2)
+        df['Income Growth'] = df['Net Income'].pct_change().round(2)
+        df['Debt Growth'] = df['Total Long Term Debt'].pct_change().round(2)
 
-    def Data_Aggregator(self, df):
+        #Create 3 Financial Ratios
+        df['Debt to Equity Ratio'] = (df['Total Long Term Debt'] / df['Total Assets']).round(2)
+        df['Gross Margin'] = (df['Gross Profit'] / df['Net Sales']).round(2)
+        df['Return on Assets'] = (df['Net Income'] / df['Total Assets']).round(2)
+
+        #Create a csv with only new features and status label in index 1
+        df2 = df[['company_name','status_label', 'Revenue Growth', 'Income Growth', 'Debt Growth', 'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets']]
+
+        #Replace infinite values with NaN
+        df2 = df2.replace([np.inf, -np.inf], np.nan)
+
+        #Drop rows with NaN values in any of the specified columns
+        df2 = df2.dropna(subset=['Revenue Growth', 'Income Growth', 'Debt Growth', 
+                                'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets'], how="any")
+
+        #Drop status label column
+        df2 = df2.drop(columns=['status_label'])
+
+        return df2
+    
+    def mergeData(self):
+        #Load the renamed data
+        renamed_data = self.Rename_Columns()
+
+        #Load the feature data
+        feature_data = self.featureCreation()
+
+        #Merge the two DataFrames
+        merged_data = renamed_data.merge(feature_data, on='company_name')
+
+        #Save the merged data to a new CSV
+        merged_data.to_csv('american_bankruptcy_merged.csv', index=False)
+
+        return merged_data
+    
+    def Data_Aggregator(self):
+        #Call the mergeData function to get the data
+        df = self.mergeData()
 
         # Aggregate data by company
         named_data = df.groupby('company_name').agg({
@@ -89,6 +136,12 @@ class TreeBankruptcyDetector:
             'Total Revenue': list,
             'Total Liabilities': list,
             'Total Operating Expenses': list,
+            'Revenue Growth': list,
+            'Income Growth': list,
+            'Debt Growth': list,
+            'Debt to Equity Ratio': list,
+            'Gross Margin': list,
+            'Return on Assets': list
         }).reset_index()
 
         # Note: Each company's status_label is consistent (either all 0s or all 1s across years).
@@ -115,6 +168,12 @@ class TreeBankruptcyDetector:
         named_data['Total Revenue'] = named_data['Total Revenue'].map(sum)
         named_data['Total Liabilities'] = named_data['Total Liabilities'].map(sum)
         named_data['Total Operating Expenses'] = named_data['Total Operating Expenses'].map(sum)
+        named_data['Revenue Growth'] = named_data['Revenue Growth'].map(sum)
+        named_data['Income Growth'] = named_data['Income Growth'].map(sum)
+        named_data['Debt Growth'] = named_data['Debt Growth'].map(sum)
+        named_data['Debt to Equity Ratio'] = named_data['Debt to Equity Ratio'].map(sum)
+        named_data['Gross Margin'] = named_data['Gross Margin'].map(sum)
+        named_data['Return on Assets'] = named_data['Return on Assets'].map(sum)
 
         
         #Take the mean of values (divide summed column by count)
@@ -137,6 +196,12 @@ class TreeBankruptcyDetector:
         named_data['Total Revenue'] = named_data['Total Revenue'] / named_data['count']
         named_data['Total Liabilities'] = named_data['Total Liabilities'] / named_data['count']
         named_data['Total Operating Expenses'] = named_data['Total Operating Expenses'] / named_data['count']
+        named_data['Revenue Growth'] = named_data['Revenue Growth'] / named_data['count']
+        named_data['Income Growth'] = named_data['Income Growth'] / named_data['count']
+        named_data['Debt Growth'] = named_data['Debt Growth'] / named_data['count']
+        named_data['Debt to Equity Ratio'] = named_data['Debt to Equity Ratio'] / named_data['count']
+        named_data['Gross Margin'] = named_data['Gross Margin'] / named_data['count']
+        named_data['Return on Assets'] = named_data['Return on Assets'] / named_data['count']
 
 
         #create a csv with the new data
@@ -155,45 +220,10 @@ class TreeBankruptcyDetector:
 
         return X_train, y_train, X_test, y_test
     
-    def featureCreation(self):
-        # Call the Rename_Columns function to get the data
-        df = self.Rename_Columns()
-
-        #Create 3 Growth Metrics
-        df['Revenue Growth'] = df['Total Revenue'].pct_change().round(2)
-        df['Income Growth'] = df['Net Income'].pct_change().round(2)
-        df['Debt Growth'] = df['Total Long Term Debt'].pct_change().round(2)
-
-        #Create 3 Financial Ratios
-        df['Debt to Equity Ratio'] = (df['Total Long Term Debt'] / df['Total Assets']).round(2)
-        df['Gross Margin'] = (df['Gross Profit'] / df['Net Sales']).round(2)
-        df['Return on Assets'] = (df['Net Income'] / df['Total Assets']).round(2)
-
-        #Create a csv with only new features and status label in index 1
-        df2 = df[['company_name','status_label', 'Revenue Growth', 'Income Growth', 'Debt Growth', 'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets']]
-
-        # Replace infinite values with NaN
-        df2 = df2.replace([np.inf, -np.inf], np.nan)
-
-        # Drop rows with NaN values in any of the specified columns
-        df2 = df2.dropna(subset=['Revenue Growth', 'Income Growth', 'Debt Growth', 
-                                'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets'], how="any")
-
-        # Save the cleaned DataFrame to a new CSV
-        df2.to_csv('american_bankruptcy_features.csv', index=False)
-
-        return df2
-    
-    
     def trainingModel(self, X_train, y_train):
-        # Apply RandomUnderSampler
-        print("Resampling the data...") #Print Statement to update user on the status of the model
-        undersampler = RandomUnderSampler(random_state=42)
-        X_train_resampled, y_train_resampled = undersampler.fit_resample(X_train, y_train)
-        
-        # Train the pipeline on the resampled data
+
         print("Training the model...") #Print Statement to update user on the status of the model
-        self.pipeline.fit(X_train_resampled, y_train_resampled)
+        self.pipeline.fit(X=X_train, y=y_train)
 
     
     def predictModel(self, X_test):
@@ -224,9 +254,10 @@ class TreeBankruptcyDetector:
         plt.show()
 
 
-    def main():
+    def main(self):
         detector = TreeBankruptcyDetector()
-        """X_train, y_train, X_test, y_test = detector.Data_Aggregator()
+
+        X_train, y_train, X_test, y_test = detector.Data_Aggregator()
 
         # Train the model
         detector.trainingModel(X_train, y_train)
@@ -238,12 +269,13 @@ class TreeBankruptcyDetector:
         print("Classification Report:\n", classification_report(y_test, y_pred_test))
         print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
 
-        # Plot the Precision-Recall Curve
+        #Plot the Precision-Recall Curve
         detector.plotPRC(X_test, y_test)
-"""
 
-        #test the feature creation function
-        detector.featureCreation()
+        #make a csv of merged data
+        detector.mergeData()
+
+
 
 if __name__ == '__main__':
-    TreeBankruptcyDetector.main()
+    TreeBankruptcyDetector.main(self=None)
