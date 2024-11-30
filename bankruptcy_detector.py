@@ -8,6 +8,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
 import seaborn as sns
+import daniel_processes_again
 import data_processing  # Ensure this module is available and correct
 
 class BankruptcyDetector:
@@ -21,7 +22,7 @@ class BankruptcyDetector:
 
     def Data_Splitter(self):
         # Load the dataset
-        df = data_processing.final_df()
+        df = daniel_processes_again.final_df()
 
         # Map target variable
         if 'status_label' not in df.columns:
@@ -29,7 +30,7 @@ class BankruptcyDetector:
         df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
 
         # Split data into training and test sets
-        train_df, test_df = train_test_split(df, test_size=0.12, random_state=42)
+        train_df, test_df = train_test_split(df, test_size=0.20, random_state=42)
 
         # Prepare features and labels
         X_train = train_df.drop(columns=['status_label', 'company_id'], errors='ignore')
