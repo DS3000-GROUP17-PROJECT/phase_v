@@ -2,12 +2,112 @@ import pandas as pd
 import numpy as np
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGradientBoostingClassifier, GradientBoostingClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 import seaborn as sns
-from imblearn.under_sampling import RandomUnderSampler
+
+import DataAggregator
+import daniel_processes_again
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+#bring in the csv
+df = pd.read_csv('american_bankruptcy.csv')
+df.drop(columns=['X4','X13','X15','X16'], inplace=True)
+
+
+#make string company name into an integer company id
+df['company_id'] = df['company_name'].str.extract(r'(\d+)').astype(int)
+
+#sort by `company_id` and `year`
+df = df.sort_values(by=['company_id', 'year']).reset_index(drop=True)
+
+#filter companies appearing less than 3 times
+df_filtered = df.groupby('company_id').filter(lambda x: len(x) >= 3)
+
+#initialize the new dataframe
+result = []
+
+#process each company
+for company, group in df_filtered.groupby('company_id'):
+    group = group.sort_values('year')  # Sort by year within each company
+    M = len(group)
+    latest_status = group['status_label'].iloc[-1]
+    features = {}
+
+    #iterate over each feature X1 to X18
+    for Xn in [f'X{i}' for i in range(1, 19) if f'X{i}' in group.columns]:
+        x_values = group[Xn].values
+        years = group['year'].values
+        t = years - years[-1]  # Adjust time with respect to the latest year
+
+        #A0, A1, A2
+        #These are the instantaneous coefficients
+        #A0 is the last reported instance
+        #A1 is the last reported difference
+        #A2 is the last reported second order difference
+        A0 = x_values[-1]
+        A1 = x_values[-1] - x_values[-2] if M > 1 else np.nan
+        A2 = (x_values[-1] - x_values[-3]) / 2 if M > 2 else np.nan
+
+        #B0, B1, B2
+        #There are the discrete weighted average coefficients
+        #B1 is the weight average sum of points
+        #B2 is the weighted average sum of differences
+        #B3 is the weighted average sum of second order differences
+        
+        weights = 1 / np.arange(1, M + 1)
+        B0 = np.sum(weights * x_values) / np.sum(weights)
+        B1 = (
+            np.sum(weights[:-1] * (x_values[:-1] - x_values[1:])) / np.sum(weights[:-1])
+            if M > 1
+            else np.nan
+        )
+        B2 = (
+            np.sum(weights[:-2] * (x_values[:-2] - x_values[2:])) / np.sum(weights[:-2])
+            if M > 2
+            else np.nan
+        )
+        
+        #C0, C1, C2, C3
+        #These are the fitted polynomial coefficients
+        #A continuous function may give an accurate prediction
+        
+        if M > 3:
+            poly = PolynomialFeatures(degree=3)
+            X_poly = poly.fit_transform(t.reshape(-1, 1))
+            model = LinearRegression().fit(X_poly, x_values)
+            C0, C1, C2, C3 = model.intercept_, *model.coef_[1:]
+        else:
+            C0, C1, C2, C3 = [np.nan] * 4
+        
+        #add to features dictionary
+        features.update(
+            {
+                f'{Xn}A0': A0,
+                f'{Xn}A1': A1,
+                f'{Xn}A2': A2,
+                f'{Xn}B0': B0,
+                f'{Xn}B1': B1,
+                f'{Xn}B2': B2,
+                f'{Xn}C0': C0,
+                f'{Xn}C1': C1,
+                f'{Xn}C2': C2,
+                f'{Xn}C3': C3
+            }
+        )
+
+    #append to result
+    result.append({'company_id': company, 'status_label': latest_status, **features})
+
+#create the final dataframe
+result_df = pd.DataFrame(result)
+result_df = result_df.dropna()
+result_df = result_df.reset_index(drop=True)
+
 
 class TreeBankruptcyDetector:
     
@@ -18,181 +118,21 @@ class TreeBankruptcyDetector:
     # estimator=HistGradientBoostingClassifier(random_state=42)
     # estimator=GradientBoostingClassifier(random_state=42)
     
+
     #Create a pipeline with StandardScaler and model of choice 
         self.pipeline = make_pipeline(
             StandardScaler(),
-            LogisticRegression(penalty='l2', random_state=42,)
+            AdaBoostClassifier(
+                estimator=HistGradientBoostingClassifier(),
+                n_estimators=200,
+                random_state=42,
+            )
         )
-
-    def Rename_Columns(self):
-        # Load the dataset
-        df = pd.read_csv('american_bankruptcy.csv')
-
-        # Rename the columns to make it easier to understand
-        df.columns = [
-            "company_name", 
-            "status_label", 
-            "year",
-            "Current Assets", 
-            "Cost of Goods Sold", 
-            "Depreciation", 
-            "EBITDA", 
-            "Inventory", 
-            "Net Income", 
-            "Total Receivables",
-            "Market Value", 
-            "Net Sales", 
-            "Total Assets", 
-            "Total Long Term Debt",
-            "Earnings Before Interest & Taxes", 
-            "Gross Profit", 
-            "Total Current Liabilities", 
-            "Retained Earnings", 
-            "Total Revenue", 
-            "Total Liabilities", 
-            "Total Operating Expenses"
-        ]
-
-        # Preprocess the dataset
-        df['company_name'] = df['company_name'].str.replace("C_", "").astype(int)
-        df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
-        df = df.sort_values(by=['company_name', 'year']).reset_index(drop=True)
-
-        #make a xslx file with the new data
-        df.to_excel('american_bankruptcy_renamed.xlsx', index=False)
-
-        return df
-
-
-    def Data_Aggregator(self, df):
-
-        # Aggregate data by company
-        named_data = df.groupby('company_name').agg({
-            'status_label': list,           
-            'year': list,
-            'Current Assets': list,
-            'Cost of Goods Sold': list,
-            'Depreciation': list,
-            'EBITDA': list,
-            'Inventory': list,
-            'Net Income': list,
-            'Total Receivables': list,
-            'Market Value': list,
-            'Net Sales': list,
-            'Total Assets': list,
-            'Total Long Term Debt': list,
-            'Earnings Before Interest & Taxes': list,
-            'Gross Profit': list,
-            'Total Current Liabilities': list,
-            'Retained Earnings': list,
-            'Total Revenue': list,
-            'Total Liabilities': list,
-            'Total Operating Expenses': list,
-        }).reset_index()
-
-        # Note: Each company's status_label is consistent (either all 0s or all 1s across years).
-        # Summing and dividing by count will always result in a binary value (0 or 1)
-        named_data['count'] = named_data['year'].map(len)
-
-        #Sum of the values of the columns
-        named_data['status_label'] = named_data['status_label'].map(sum)
-        named_data['Current Assets'] = named_data['Current Assets'].map(sum)
-        named_data['Cost of Goods Sold'] = named_data['Cost of Goods Sold'].map(sum)
-        named_data['Depreciation'] = named_data['Depreciation'].map(sum)
-        named_data['EBITDA'] = named_data['EBITDA'].map(sum)
-        named_data['Inventory'] = named_data['Inventory'].map(sum)
-        named_data['Net Income'] = named_data['Net Income'].map(sum)
-        named_data['Total Receivables'] = named_data['Total Receivables'].map(sum)
-        named_data['Market Value'] = named_data['Market Value'].map(sum)
-        named_data['Net Sales'] = named_data['Net Sales'].map(sum)
-        named_data['Total Assets'] = named_data['Total Assets'].map(sum)
-        named_data['Total Long Term Debt'] = named_data['Total Long Term Debt'].map(sum)
-        named_data['Earnings Before Interest & Taxes'] = named_data['Earnings Before Interest & Taxes'].map(sum)
-        named_data['Gross Profit'] = named_data['Gross Profit'].map(sum)
-        named_data['Total Current Liabilities'] = named_data['Total Current Liabilities'].map(sum)
-        named_data['Retained Earnings'] = named_data['Retained Earnings'].map(sum)
-        named_data['Total Revenue'] = named_data['Total Revenue'].map(sum)
-        named_data['Total Liabilities'] = named_data['Total Liabilities'].map(sum)
-        named_data['Total Operating Expenses'] = named_data['Total Operating Expenses'].map(sum)
-
-        
-        #Take the mean of values (divide summed column by count)
-        named_data['status_label'] = named_data['status_label'] / named_data['count']
-        named_data['Current Assets'] = named_data['Current Assets'] / named_data['count']
-        named_data['Cost of Goods Sold'] = named_data['Cost of Goods Sold'] / named_data['count']
-        named_data['Depreciation'] = named_data['Depreciation'] / named_data['count']
-        named_data['EBITDA'] = named_data['EBITDA'] / named_data['count']
-        named_data['Inventory'] = named_data['Inventory'] / named_data['count']
-        named_data['Net Income'] = named_data['Net Income'] / named_data['count']
-        named_data['Total Receivables'] = named_data['Total Receivables'] / named_data['count']
-        named_data['Market Value'] = named_data['Market Value'] / named_data['count']
-        named_data['Net Sales'] = named_data['Net Sales'] / named_data['count']
-        named_data['Total Assets'] = named_data['Total Assets'] / named_data['count']
-        named_data['Total Long Term Debt'] = named_data['Total Long Term Debt'] / named_data['count']
-        named_data['Earnings Before Interest & Taxes'] = named_data['Earnings Before Interest & Taxes'] / named_data['count']
-        named_data['Gross Profit'] = named_data['Gross Profit'] / named_data['count']
-        named_data['Total Current Liabilities'] = named_data['Total Current Liabilities'] / named_data['count']
-        named_data['Retained Earnings'] = named_data['Retained Earnings'] / named_data['count']
-        named_data['Total Revenue'] = named_data['Total Revenue'] / named_data['count']
-        named_data['Total Liabilities'] = named_data['Total Liabilities'] / named_data['count']
-        named_data['Total Operating Expenses'] = named_data['Total Operating Expenses'] / named_data['count']
-
-
-        #create a csv with the new data
-        named_data.to_csv('named_data.csv', index=False)
-
-        # Split the data into training and test sets based on the year
-        train_data = df[df['year'].between(1999, 2014)]
-        test_data = df[df['year'].between(2015, 2018)]
-
-        # Prepare the data for logistic regression
-        X_train = train_data.drop(columns=['status_label'])
-        y_train = train_data['status_label']
-
-        X_test = test_data.drop(columns=['status_label'])
-        y_test = test_data['status_label']
-
-        return X_train, y_train, X_test, y_test
-    
-    def featureCreation(self):
-        # Call the Rename_Columns function to get the data
-        df = self.Rename_Columns()
-
-        #Create 3 Growth Metrics
-        df['Revenue Growth'] = df['Total Revenue'].pct_change().round(2)
-        df['Income Growth'] = df['Net Income'].pct_change().round(2)
-        df['Debt Growth'] = df['Total Long Term Debt'].pct_change().round(2)
-
-        #Create 3 Financial Ratios
-        df['Debt to Equity Ratio'] = (df['Total Long Term Debt'] / df['Total Assets']).round(2)
-        df['Gross Margin'] = (df['Gross Profit'] / df['Net Sales']).round(2)
-        df['Return on Assets'] = (df['Net Income'] / df['Total Assets']).round(2)
-
-        #Create a csv with only new features and status label in index 1
-        df2 = df[['company_name','status_label', 'Revenue Growth', 'Income Growth', 'Debt Growth', 'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets']]
-
-        # Replace infinite values with NaN
-        df2 = df2.replace([np.inf, -np.inf], np.nan)
-
-        # Drop rows with NaN values in any of the specified columns
-        df2 = df2.dropna(subset=['Revenue Growth', 'Income Growth', 'Debt Growth', 
-                                'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets'], how="any")
-
-        # Save the cleaned DataFrame to a new CSV
-        df2.to_csv('american_bankruptcy_features.csv', index=False)
-
-        return df2
-    
     
     def trainingModel(self, X_train, y_train):
-        # Apply RandomUnderSampler
-        print("Resampling the data...") #Print Statement to update user on the status of the model
-        undersampler = RandomUnderSampler(random_state=42)
-        X_train_resampled, y_train_resampled = undersampler.fit_resample(X_train, y_train)
-        
-        # Train the pipeline on the resampled data
+
         print("Training the model...") #Print Statement to update user on the status of the model
-        self.pipeline.fit(X_train_resampled, y_train_resampled)
+        self.pipeline.fit(X=X_train, y=y_train)
 
     
     def predictModel(self, X_test):
@@ -223,9 +163,23 @@ class TreeBankruptcyDetector:
         plt.show()
 
 
-    def main():
+    def main(self):
         detector = TreeBankruptcyDetector()
-        """X_train, y_train, X_test, y_test = detector.Data_Aggregator()
+        df = result_df
+
+        # Map target variable
+        if 'status_label' not in df.columns:
+            raise KeyError("Column 'status_label' not found in the dataset.")
+        df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
+
+        # Split data into training and test sets
+        train_df, test_df = train_test_split(df, test_size=0.20, random_state=42)
+
+        # Prepare features and labels
+        X_train = train_df.drop(columns=['status_label', 'company_id'], errors='ignore')
+        y_train = train_df['status_label']
+        X_test = test_df.drop(columns=['status_label', 'company_id'], errors='ignore')
+        y_test = test_df['status_label']
 
         # Train the model
         detector.trainingModel(X_train, y_train)
@@ -237,12 +191,10 @@ class TreeBankruptcyDetector:
         print("Classification Report:\n", classification_report(y_test, y_pred_test))
         print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
 
-        # Plot the Precision-Recall Curve
+        #Plot the Precision-Recall Curve
         detector.plotPRC(X_test, y_test)
-"""
 
-        #test the feature creation function
-        detector.featureCreation()
+
 
 if __name__ == '__main__':
-    TreeBankruptcyDetector.main()
+    TreeBankruptcyDetector.main(self=None)
