@@ -1,31 +1,31 @@
 import pandas as pd
 import numpy as np
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGradientBoostingClassifier, GradientBoostingClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 import seaborn as sns
-#from imblearn.over_sampling import SMOTE
+from imblearn.under_sampling import RandomUnderSampler
 
 class TreeBankruptcyDetector:
     
     def __init__(self):
-    #replace string to change model - Classifier with L2 regularization - "LogisticRegression(penalty='l2', random_state=42,)""
+    #replace string to change model
+    # LogisticRegression(penalty='l2', random_state=42,)
+    # estimator=RandomForestClassifier(n_estimators=100, random_state=42)
+    # estimator=HistGradientBoostingClassifier(random_state=42)
+    # estimator=GradientBoostingClassifier(random_state=42)
     
 
-    #Create a pipeline with StandardScaler and RandomForestClassifier
-        self.pipeline = Pipeline([
-            ('scaler', StandardScaler()),  # Standardize features
-            ('classifier', AdaBoostClassifier(
-                estimator=HistGradientBoostingClassifier(),
-                n_estimators=400,
-                random_state=42
-            ))
-        ])
+    #Create a pipeline with StandardScaler and model of choice 
+        self.pipeline = make_pipeline(
+            StandardScaler(),
+            LogisticRegression(penalty='l2', random_state=42,)
+        )
 
-    def Data_Splitter(self):
+    def Rename_Columns(self):
         # Load the dataset
         df = pd.read_csv('american_bankruptcy.csv')
 
@@ -59,6 +59,14 @@ class TreeBankruptcyDetector:
         df['status_label'] = df['status_label'].map({'alive': 0, 'failed': 1})
         df = df.sort_values(by=['company_name', 'year']).reset_index(drop=True)
 
+        #make a xslx file with the new data
+        df.to_excel('american_bankruptcy_renamed.xlsx', index=False)
+
+        return df
+
+
+    def Data_Aggregator(self, df):
+
         # Aggregate data by company
         named_data = df.groupby('company_name').agg({
             'status_label': list,           
@@ -83,7 +91,8 @@ class TreeBankruptcyDetector:
             'Total Operating Expenses': list,
         }).reset_index()
 
-        # Count the index of the inner array in index 0
+        # Note: Each company's status_label is consistent (either all 0s or all 1s across years).
+        # Summing and dividing by count will always result in a binary value (0 or 1)
         named_data['count'] = named_data['year'].map(len)
 
         #Sum of the values of the columns
@@ -129,6 +138,10 @@ class TreeBankruptcyDetector:
         named_data['Total Liabilities'] = named_data['Total Liabilities'] / named_data['count']
         named_data['Total Operating Expenses'] = named_data['Total Operating Expenses'] / named_data['count']
 
+
+        #create a csv with the new data
+        named_data.to_csv('named_data.csv', index=False)
+
         # Split the data into training and test sets based on the year
         train_data = df[df['year'].between(1999, 2014)]
         test_data = df[df['year'].between(2015, 2018)]
@@ -140,24 +153,56 @@ class TreeBankruptcyDetector:
         X_test = test_data.drop(columns=['status_label'])
         y_test = test_data['status_label']
 
-        return X_train, y_train, X_test, y_test, df
+        return X_train, y_train, X_test, y_test
+    
+    def featureCreation(self):
+        # Call the Rename_Columns function to get the data
+        df = self.Rename_Columns()
 
+        #Create 3 Growth Metrics
+        df['Revenue Growth'] = df['Total Revenue'].pct_change().round(2)
+        df['Income Growth'] = df['Net Income'].pct_change().round(2)
+        df['Debt Growth'] = df['Total Long Term Debt'].pct_change().round(2)
+
+        #Create 3 Financial Ratios
+        df['Debt to Equity Ratio'] = (df['Total Long Term Debt'] / df['Total Assets']).round(2)
+        df['Gross Margin'] = (df['Gross Profit'] / df['Net Sales']).round(2)
+        df['Return on Assets'] = (df['Net Income'] / df['Total Assets']).round(2)
+
+        #Create a csv with only new features and status label in index 1
+        df2 = df[['company_name','status_label', 'Revenue Growth', 'Income Growth', 'Debt Growth', 'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets']]
+
+        # Replace infinite values with NaN
+        df2 = df2.replace([np.inf, -np.inf], np.nan)
+
+        # Drop rows with NaN values in any of the specified columns
+        df2 = df2.dropna(subset=['Revenue Growth', 'Income Growth', 'Debt Growth', 
+                                'Debt to Equity Ratio', 'Gross Margin', 'Return on Assets'], how="any")
+
+        # Save the cleaned DataFrame to a new CSV
+        df2.to_csv('american_bankruptcy_features.csv', index=False)
+
+        return df2
+    
+    
     def trainingModel(self, X_train, y_train):
-        # Apply SMOTE to the training data
-        #smote = SMOTE(random_state=42)
-        #X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
+        # Apply RandomUnderSampler
+        print("Resampling the data...") #Print Statement to update user on the status of the model
+        undersampler = RandomUnderSampler(random_state=42)
+        X_train_resampled, y_train_resampled = undersampler.fit_resample(X_train, y_train)
+        
+        # Train the pipeline on the resampled data
+        print("Training the model...") #Print Statement to update user on the status of the model
+        self.pipeline.fit(X_train_resampled, y_train_resampled)
 
-        # Train the pipeline on the resampled training data
-        self.pipeline.fit(X_train, y_train)
-
-    def validateModel(self, X_valid):
-        # Make prediction on the validation set
-        y_pred_valid = self.pipeline.predict(X_valid)
-        return y_pred_valid
     
     def predictModel(self, X_test):
-        # Make prediction on the test set
-        y_pred_test = self.pipeline.predict(X_test)
+        print("Making predictions...") #Print Statement to update user on the status of the model
+
+        y_pred_test = self.pipeline.predict(X_test) #Predict the model
+
+        print("Predictions complete!") #Print Statement to update user on the status of the model
+
         return y_pred_test
 
     def plotPRC(self, X, y):
@@ -178,27 +223,10 @@ class TreeBankruptcyDetector:
         plt.grid(True)
         plt.show()
 
-    def plotROC(self, X, y):
-        # Get the predicted probabilities
-        y_scores = self.pipeline.predict_proba(X)[:, 1]
-
-        # Calculate ROC curve
-        fpr, tpr, _ = roc_curve(y, y_scores)
-        roc_auc = roc_auc_score(y, y_scores)
-
-        # Plot the ROC curve
-        plt.figure(figsize=(10, 6))
-        plt.plot(fpr, tpr, marker='.', label=f'ROC (AUC = {roc_auc:.2f})')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver Operating Characteristic (ROC) Curve')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
 
     def main():
         detector = TreeBankruptcyDetector()
-        X_train, y_train, X_test, y_test, df = detector.Data_Splitter()
+        """X_train, y_train, X_test, y_test = detector.Data_Aggregator()
 
         # Train the model
         detector.trainingModel(X_train, y_train)
@@ -212,9 +240,10 @@ class TreeBankruptcyDetector:
 
         # Plot the Precision-Recall Curve
         detector.plotPRC(X_test, y_test)
+"""
 
-         # Plot the ROC Curve
-        detector.plotROC(X_test, y_test)
+        #test the feature creation function
+        detector.featureCreation()
 
 if __name__ == '__main__':
     TreeBankruptcyDetector.main()
