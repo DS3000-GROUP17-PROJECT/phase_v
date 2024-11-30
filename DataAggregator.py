@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGradientBoostingClassifier, GradientBoostingClassifier
@@ -191,9 +192,11 @@ class DataAggregator:
         #create a csv with the new data
         named_data.to_csv('meanOfValuesColumn.csv', index=False)
 
-        # Split the data into training and test sets based on the year
-        train_data = df[df['year'].between(1999, 2014)]
-        test_data = df[df['year'].between(2015, 2018)]
+        #Drop the year and count columns
+        named_data = named_data.drop(columns=['year', 'count'])
+
+        # Split the data into training and test sets based on 85% training and 15% test using train_test_split
+        train_data, test_data = train_test_split(named_data, test_size=0.15, random_state=42)
 
         # Create a csv with the training data
         train_data.to_csv('train_data.csv', index=False)
@@ -201,7 +204,7 @@ class DataAggregator:
         # Create a csv with the test data
         test_data.to_csv('test_data.csv', index=False)
 
-        # Prepare the data for logistic regression
+        # Prepare the data for desired model (HistGradientBoostingClassifier is best for now)
         X_train = train_data.drop(columns=['status_label'])
         y_train = train_data['status_label']
 

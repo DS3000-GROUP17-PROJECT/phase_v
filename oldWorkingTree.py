@@ -4,7 +4,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, HistGradientBoostingClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc, roc_auc_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 #from imblearn.over_sampling import SMOTE
@@ -14,7 +14,6 @@ class TreeBankruptcyDetector:
     def __init__(self):
     #replace string to change model - Classifier with L2 regularization - "LogisticRegression(penalty='l2', random_state=42,)""
     
-
     #Create a pipeline with StandardScaler and RandomForestClassifier
         self.pipeline = Pipeline([
             ('scaler', StandardScaler()),  # Standardize features
@@ -178,24 +177,6 @@ class TreeBankruptcyDetector:
         plt.grid(True)
         plt.show()
 
-    def plotROC(self, X, y):
-        # Get the predicted probabilities
-        y_scores = self.pipeline.predict_proba(X)[:, 1]
-
-        # Calculate ROC curve
-        fpr, tpr, _ = roc_curve(y, y_scores)
-        roc_auc = roc_auc_score(y, y_scores)
-
-        # Plot the ROC curve
-        plt.figure(figsize=(10, 6))
-        plt.plot(fpr, tpr, marker='.', label=f'ROC (AUC = {roc_auc:.2f})')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver Operating Characteristic (ROC) Curve')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
     def main():
         detector = TreeBankruptcyDetector()
         X_train, y_train, X_test, y_test, df = detector.Data_Splitter()
@@ -212,9 +193,6 @@ class TreeBankruptcyDetector:
 
         # Plot the Precision-Recall Curve
         detector.plotPRC(X_test, y_test)
-
-         # Plot the ROC Curve
-        detector.plotROC(X_test, y_test)
 
 if __name__ == '__main__':
     TreeBankruptcyDetector.main()
