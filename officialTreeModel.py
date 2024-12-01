@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import AdaBoostClassifier, HistGradientBoostingClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc, mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc, mean_squared_error
 import matplotlib.pyplot as plt
 import numpy as np
 
