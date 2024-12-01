@@ -2,12 +2,12 @@
 import numpy as np
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import AdaBoostClassifier, HistGradientBoostingClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, precision_recall_curve, auc, mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.linear_model import LinearRegression
 
 import officialDataProcessing
 
@@ -104,40 +104,16 @@ class TreeBankruptcyDetector:
         y_train_pred = model.predict(X_train)
         y_test_pred = model.predict(X_test)
 
-        # 1. Mean Squared Error (MSE)
+        # Mean Squared Error
         train_mse = mean_squared_error(y_train, y_train_pred)
         test_mse = mean_squared_error(y_test, y_test_pred)
-
-        # 2. Mean Absolute Error (MAE)
-        train_mae = mean_absolute_error(y_train, y_train_pred)
-        test_mae = mean_absolute_error(y_test, y_test_pred)
-
-        # 3. R-squared (R²)
-        train_r2 = r2_score(y_train, y_train_pred)
-        test_r2 = r2_score(y_test, y_test_pred)
-
-        # 4. Bias and Variance Estimation
-        # Bias is the difference between predicted and true values on the training set
-        bias_train = np.mean(y_train - y_train_pred)
-
-        # Variance is the variability of predictions (or errors) on the test set
-        variance_test = np.var(y_test_pred)
 
         # Print results
         print(f"Training MSE: {train_mse}")
         print(f"Test MSE: {test_mse}")
-        print(f"Training MAE: {train_mae}")
-        print(f"Test MAE: {test_mae}")
-        print(f"Training R²: {train_r2}")
-        print(f"Test R²: {test_r2}")
-        print(f"Bias (Training): {bias_train}")
-        print(f"Variance (Test): {variance_test}")
 
         #Plot the Precision-Recall Curve
         detector.plotPRC(X_test, y_test)
-
-
-
 
 if __name__ == '__main__':
     TreeBankruptcyDetector.main(self=None)
