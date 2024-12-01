@@ -102,5 +102,5 @@ def dp_df():
     return result_df
 
 #Final dataframe has 6553 companies
-#print(result_df)
+print(result_df)
 
