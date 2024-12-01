@@ -196,9 +196,6 @@ class TreeBankruptcyDetector:
         print("Classification Report:\n", classification_report(y_test, y_pred_test))
         print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
 
-        #Plot the Precision-Recall Curve
-        detector.plotPRC(X_test, y_test)
-
         # Assuming result_df is already created as per your code
 
         # Assume 'status_label' is the target variable, and the rest are features
@@ -244,6 +241,9 @@ class TreeBankruptcyDetector:
         print(f"Test R²: {test_r2}")
         print(f"Bias (Training): {bias_train}")
         print(f"Variance (Test): {variance_test}")
+
+        #Plot the Precision-Recall Curve
+        detector.plotPRC(X_test, y_test)
 
 
 
